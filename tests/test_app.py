@@ -297,7 +297,7 @@ def test_daily_preserves_days_with_missing_parts(client, app_module, monkeypatch
     assert days[1]["overnightForecast"] is None
 
 
-def test_daily_rejects_short_upstream_forecast(client, app_module, monkeypatch):
+def test_daily_returns_short_upstream_forecast(client, app_module, monkeypatch):
     monkeypatch.setattr(
         app_module,
         "fetch_weatherkit",
@@ -306,8 +306,8 @@ def test_daily_rejects_short_upstream_forecast(client, app_module, monkeypatch):
     response = client.get(
         "/weather/daily?lat=39.7392&lon=-104.9903", headers=auth_headers()
     )
-    assert response.status_code == 502
-    assert response.get_json() == {"error": "forecastDaily returned fewer than 10 days"}
+    assert response.status_code == 200
+    assert len(response.get_json()["days"]) == 9
 
 
 def test_hourly_includes_iana_timezone(client, app_module, monkeypatch):

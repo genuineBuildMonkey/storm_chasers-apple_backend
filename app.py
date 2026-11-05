@@ -546,9 +546,6 @@ def weather_daily():
     ]
     valid_days.sort(key=lambda day: day["forecastStart"])
 
-    if len(valid_days) < DAILY_FORECAST_DAYS:
-        return jsonify({"error": "forecastDaily returned fewer than 10 days"}), 502
-
     days = []
     for day in valid_days[:DAILY_FORECAST_DAYS]:
         days.append(
