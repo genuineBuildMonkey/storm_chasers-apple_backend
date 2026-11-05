@@ -41,6 +41,7 @@ the `X-Weather-Key` header and `lat`/`lon` query parameters:
 
 - `GET /weather/current`
 - `GET /weather/hourly`
+- `GET /weather/hourly/detail`
 - `GET /weather/next-hour`
 - `GET /weather/daily`
 - `GET /weather/daily/detail`
@@ -49,8 +50,12 @@ the `X-Weather-Key` header and `lat`/`lon` query parameters:
 Daily forecasts contain the first 10 chronological WeatherKit days. The daily
 detail route also requires a `date=YYYY-MM-DD` query parameter and returns one
 day with sunrise, sunset, direct day-part values, and hourly-derived feels-like
-temperature, maximum gust, maximum UV index, and average pressure. Hourly and
-daily responses include an IANA `timeZone` resolved from their coordinates.
+temperature, maximum gust, maximum UV index, and average pressure. The hourly
+detail route requires a URL-encoded, offset-aware ISO 8601 `time` from an hourly
+forecast (for example, `time=2026-11-03T03%3A00%3A00-07%3A00`) and returns the
+conditions for that hour, including apparent temperature, precipitation amount,
+snowfall intensity, wind and gust, UV index, cloud cover, and pressure. Hourly
+and daily responses include an IANA `timeZone` resolved from their coordinates.
 Alert responses contain an `alerts` array; WeatherKit alert detail text is
 resolved by the backend.
 

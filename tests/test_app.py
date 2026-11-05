@@ -115,7 +115,9 @@ def test_weather_route_requires_api_key(client):
     assert response.get_json() == {"error": "unauthorized"}
 
 
-@pytest.mark.parametrize("route", ["daily", "daily/detail", "alerts"])
+@pytest.mark.parametrize(
+    "route", ["hourly/detail", "daily", "daily/detail", "alerts"]
+)
 @pytest.mark.parametrize(
     ("query", "message"),
     [
@@ -318,6 +320,105 @@ def test_hourly_includes_iana_timezone(client, app_module, monkeypatch):
     )
     assert response.status_code == 200
     assert response.get_json()["timeZone"] == "America/Denver"
+
+
+def test_hourly_detail_returns_hour_conditions(client, app_module, monkeypatch):
+    upstream_hour = {
+        "forecastStart": "2026-11-03T03:00:00-07:00",
+        "conditionCode": "MostlyClear",
+        "daylight": False,
+        "temperature": 18.333,
+        "temperatureApparent": 17.778,
+        "precipitationAmount": 0,
+        "precipitationChance": 0.05,
+        "precipitationType": "clear",
+        "snowfallIntensity": 0,
+        "humidity": 0.42,
+        "windSpeed": 9.656,
+        "windDirection": 270,
+        "windGust": 16.093,
+        "uvIndex": 0,
+        "cloudCover": 0.12,
+        "pressure": 1010,
+        "pressureTrend": "falling",
+        "temperatureDewPoint": 5.1,
+        "visibility": 24000,
+    }
+    calls = []
+
+    def fake_fetch(lat, lon, dataset, extra_params=None):
+        calls.append((dataset, extra_params))
+        return {
+            "forecastHourly": {
+                "metadata": {
+                    "latitude": 39.7392,
+                    "longitude": -104.9903,
+                    "readTime": "2026-11-03T08:00:00Z",
+                    "units": "metric",
+                },
+                "hours": [upstream_hour],
+            }
+        }
+
+    monkeypatch.setattr(app_module, "fetch_weatherkit", fake_fetch)
+    response = client.get(
+        "/weather/hourly/detail"
+        "?lat=39.7392&lon=-104.9903&time=2026-11-03T03:00:00-07:00",
+        headers=auth_headers(),
+    )
+    body = response.get_json()
+
+    assert response.status_code == 200
+    assert body["timeZone"] == "America/Denver"
+    assert body["units"] == "metric"
+    assert body["hour"] == upstream_hour
+    assert calls == [
+        (
+            "forecastHourly",
+            {
+                "timezone": "America/Denver",
+                "hourlyStart": "2026-11-03T03:00:00-07:00",
+                "hourlyEnd": "2026-11-03T04:00:00-07:00",
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("time_query", "message"),
+    [
+        ("", "time is required"),
+        ("&time=3am", "time must be an ISO 8601 timestamp with offset"),
+        (
+            "&time=2026-11-03T03:00:00",
+            "time must be an ISO 8601 timestamp with offset",
+        ),
+    ],
+)
+def test_hourly_detail_validates_time(client, time_query, message):
+    response = client.get(
+        f"/weather/hourly/detail?lat=39.7392&lon=-104.9903{time_query}",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 400
+    assert response.get_json() == {"error": message}
+
+
+def test_hourly_detail_returns_unavailable_for_missing_hour(
+    client, app_module, monkeypatch
+):
+    monkeypatch.setattr(
+        app_module,
+        "fetch_weatherkit",
+        lambda *args, **kwargs: {"forecastHourly": {"hours": []}},
+    )
+    response = client.get(
+        "/weather/hourly/detail"
+        "?lat=39.7392&lon=-104.9903&time=2026-11-03T03:00:00Z",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 502
+    assert response.get_json() == {"error": "hourly detail unavailable"}
 
 
 def test_alerts_returns_empty_list_when_unavailable(client, app_module, monkeypatch):

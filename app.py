@@ -254,6 +254,31 @@ def day_part_detail_response(part, hours, daytime):
     return response
 
 
+def hour_detail_response(hour):
+    fields = (
+        "forecastStart",
+        "conditionCode",
+        "daylight",
+        "temperature",
+        "temperatureApparent",
+        "precipitationAmount",
+        "precipitationChance",
+        "precipitationType",
+        "snowfallIntensity",
+        "humidity",
+        "windSpeed",
+        "windDirection",
+        "windGust",
+        "uvIndex",
+        "cloudCover",
+        "pressure",
+        "pressureTrend",
+        "temperatureDewPoint",
+        "visibility",
+    )
+    return {field: hour.get(field) for field in fields}
+
+
 def detail_date_bounds(forecast_date, time_zone):
     zone = ZoneInfo(time_zone)
     next_date = forecast_date + timedelta(days=1)
@@ -446,6 +471,56 @@ def weather_hourly():
     response["timeZone"] = time_zone
     response["hours"] = hours
 
+    return jsonify(response)
+
+
+@app.get("/weather/hourly/detail")
+@require_api_key
+def weather_hourly_detail():
+    lat, lon, error = get_coordinates()
+    if error:
+        return error
+
+    time_raw = request.args.get("time")
+    if time_raw is None:
+        return jsonify({"error": "time is required"}), 400
+
+    forecast_start = parse_weatherkit_time(time_raw)
+    if forecast_start is None or forecast_start.utcoffset() is None:
+        return jsonify({"error": "time must be an ISO 8601 timestamp with offset"}), 400
+
+    forecast_end = forecast_start + timedelta(hours=1)
+    time_zone = timezone_for_coordinates(lat, lon)
+    data = fetch_weatherkit(
+        lat,
+        lon,
+        "forecastHourly",
+        {
+            "timezone": time_zone,
+            "hourlyStart": forecast_start.isoformat(),
+            "hourlyEnd": forecast_end.isoformat(),
+        },
+    )
+
+    hourly_forecast = data.get("forecastHourly") or {}
+    hours = hourly_forecast.get("hours") or []
+    hour = next(
+        (
+            value
+            for value in hours
+            if isinstance(value, dict)
+            and parse_weatherkit_time(value.get("forecastStart")) == forecast_start
+        ),
+        None,
+    )
+    if hour is None:
+        return jsonify({"error": "hourly detail unavailable"}), 502
+
+    metadata = hourly_forecast.get("metadata", {})
+    response = metadata_response_fields(metadata, lat, lon)
+    response["timeZone"] = time_zone
+    response["units"] = metadata.get("units", "metric")
+    response["hour"] = hour_detail_response(hour)
     return jsonify(response)
 
 
