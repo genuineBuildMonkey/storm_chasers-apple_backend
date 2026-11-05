@@ -60,6 +60,9 @@ def daily_weatherkit_response(day_count=10):
                 "precipitationChance": 0.125,
                 "sunrise": f"{forecast_date.isoformat()}T06:30:00-07:00",
                 "sunset": f"{forecast_date.isoformat()}T16:55:00-07:00",
+                "moonPhase": "waningCrescent",
+                "moonrise": f"{forecast_date.isoformat()}T02:15:00-07:00",
+                "moonset": f"{forecast_date.isoformat()}T14:20:00-07:00",
                 "daytimeForecast": {
                     "forecastStart": f"{forecast_date.isoformat()}T07:00:00-07:00",
                     "forecastEnd": f"{forecast_date.isoformat()}T19:00:00-07:00",
@@ -233,6 +236,9 @@ def test_daily_detail_returns_direct_and_aggregated_fields(
     assert body["units"] == "metric"
     assert first_day["sunrise"] == "2026-11-03T06:30:00-07:00"
     assert first_day["sunset"] == "2026-11-03T16:55:00-07:00"
+    assert first_day["moonPhase"] == "waningCrescent"
+    assert first_day["moonrise"] == "2026-11-03T02:15:00-07:00"
+    assert first_day["moonset"] == "2026-11-03T14:20:00-07:00"
     assert first_day["daytimeForecast"]["precipitationAmount"] == 1.5
     assert first_day["daytimeForecast"]["snowfallAmount"] == 0
     assert first_day["daytimeForecast"]["cloudCover"] == 0.24

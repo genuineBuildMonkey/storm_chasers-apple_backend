@@ -618,6 +618,9 @@ def weather_daily_detail():
         "precipitationChance": day.get("precipitationChance"),
         "sunrise": day.get("sunrise"),
         "sunset": day.get("sunset"),
+        "moonPhase": day.get("moonPhase"),
+        "moonrise": day.get("moonrise"),
+        "moonset": day.get("moonset"),
         "daytimeForecast": day_part_detail_response(
             day.get("daytimeForecast"), hours, daytime=True
         ),
