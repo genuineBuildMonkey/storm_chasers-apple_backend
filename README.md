@@ -47,7 +47,10 @@ the `X-Weather-Key` header and `lat`/`lon` query parameters:
 - `GET /weather/daily/detail`
 - `GET /weather/alerts`
 
-Daily forecasts contain up to the first 10 chronological WeatherKit days. The daily
+Hourly forecasts accept an optional `hours` query parameter from 1 through 240 and
+default to the WeatherKit maximum of 240 hours (10 days). Daily forecasts accept
+an optional `days` parameter from 1 through 10, defaulting to 10, and contain up to
+that many chronological WeatherKit days. The daily
 detail route also requires a `date=YYYY-MM-DD` query parameter and returns one
 day with sunrise, sunset, moon phase, moonrise, moonset, direct day-part values,
 and hourly-derived feels-like temperature, maximum gust, maximum UV index, and

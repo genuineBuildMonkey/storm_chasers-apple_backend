@@ -166,6 +166,22 @@ def test_daily_returns_ten_chronological_metric_days(client, app_module, monkeyp
     assert calls == [("forecastDaily", {"timezone": "America/Denver"})]
 
 
+def test_daily_accepts_days_parameter(client, app_module, monkeypatch):
+    monkeypatch.setattr(
+        app_module,
+        "fetch_weatherkit",
+        lambda *args, **kwargs: daily_weatherkit_response(),
+    )
+
+    response = client.get(
+        "/weather/daily?lat=39.7392&lon=-104.9903&days=3",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert len(response.get_json()["days"]) == 3
+
+
 def test_daily_detail_returns_direct_and_aggregated_fields(
     client, app_module, monkeypatch
 ):
@@ -310,22 +326,82 @@ def test_daily_returns_short_upstream_forecast(client, app_module, monkeypatch):
     assert len(response.get_json()["days"]) == 9
 
 
-def test_hourly_includes_iana_timezone(client, app_module, monkeypatch):
-    monkeypatch.setattr(
-        app_module,
-        "fetch_weatherkit",
-        lambda *args, **kwargs: {
+def test_hourly_defaults_to_maximum_range(client, app_module, monkeypatch):
+    calls = []
+
+    def fake_fetch(lat, lon, dataset, extra_params=None):
+        calls.append((dataset, extra_params))
+        return {
             "forecastHourly": {
                 "metadata": {"readTime": "2026-11-03T20:00:00Z"},
                 "hours": [],
             }
-        },
-    )
+        }
+
+    monkeypatch.setattr(app_module, "fetch_weatherkit", fake_fetch)
     response = client.get(
         "/weather/hourly?lat=39.7392&lon=-104.9903", headers=auth_headers()
     )
     assert response.status_code == 200
     assert response.get_json()["timeZone"] == "America/Denver"
+    assert calls == [
+        (
+            "forecastHourly",
+            {
+                "timezone": "America/Denver",
+                "relativeHourlyStart": 0,
+                "relativeHourlyEnd": 240,
+                "hourlyRelativeTo": "now",
+            },
+        )
+    ]
+
+
+def test_hourly_accepts_hours_parameter(client, app_module, monkeypatch):
+    calls = []
+    upstream_hours = [
+        {"forecastStart": f"2026-11-03T{hour:02}:00:00-07:00"}
+        for hour in range(4)
+    ]
+
+    def fake_fetch(lat, lon, dataset, extra_params=None):
+        calls.append((dataset, extra_params))
+        return {
+            "forecastHourly": {"metadata": {}, "hours": upstream_hours},
+        }
+
+    monkeypatch.setattr(app_module, "fetch_weatherkit", fake_fetch)
+    response = client.get(
+        "/weather/hourly?lat=39.7392&lon=-104.9903&hours=3",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert len(response.get_json()["hours"]) == 3
+    assert calls[0][1]["relativeHourlyEnd"] == 3
+
+
+@pytest.mark.parametrize(
+    ("route", "parameter", "value", "message"),
+    [
+        ("hourly", "hours", "storm", "hours must be an integer"),
+        ("hourly", "hours", "0", "hours must be between 1 and 240"),
+        ("hourly", "hours", "241", "hours must be between 1 and 240"),
+        ("daily", "days", "storm", "days must be an integer"),
+        ("daily", "days", "0", "days must be between 1 and 10"),
+        ("daily", "days", "11", "days must be between 1 and 10"),
+    ],
+)
+def test_forecast_routes_validate_range_parameter(
+    client, route, parameter, value, message
+):
+    response = client.get(
+        f"/weather/{route}?lat=39.7392&lon=-104.9903&{parameter}={value}",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": message}
 
 
 def test_hourly_detail_returns_hour_conditions(client, app_module, monkeypatch):

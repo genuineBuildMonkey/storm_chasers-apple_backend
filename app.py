@@ -18,12 +18,13 @@ APPLE_SERVICE_ID = os.environ["APPLE_SERVICE_ID"]
 APPLE_KEY_FILE = os.environ["APPLE_KEY_FILE"]
 WEATHER_API_KEY = os.environ["WEATHER_API_KEY"]
 
-WEATHERKIT_BASE_URL = "https://weatherkit.apple.com/api/v1/weather/en"
+WEATHERKIT_BASE_URL = "https://weatherkit.apple.com/api/v2/weather/en"
 WEATHERKIT_ALERT_BASE_URL = "https://weatherkit.apple.com/api/v1/weatherAlert/en"
 WEATHERKIT_TIMEZONE = os.environ.get("WEATHERKIT_TIMEZONE", "UTC")
 WEATHERKIT_COUNTRY_CODE = os.environ.get("WEATHERKIT_COUNTRY_CODE", "US")
 WEATHERKIT_TIMEOUT_SECONDS = 15
 DAILY_FORECAST_DAYS = 10
+HOURLY_FORECAST_HOURS = 240
 TIMEZONE_FINDER = TimezoneFinder()
 
 with open(APPLE_KEY_FILE, encoding="utf-8") as key_file:
@@ -102,6 +103,25 @@ def get_coordinates():
         return None, None, (jsonify({"error": "lon must be between -180 and 180"}), 400)
 
     return lat, lon, None
+
+
+def get_bounded_int_arg(name, default, maximum):
+    value_raw = request.args.get(name)
+    if value_raw is None:
+        return default, None
+
+    try:
+        value = int(value_raw)
+    except ValueError:
+        return None, (jsonify({"error": f"{name} must be an integer"}), 400)
+
+    if not 1 <= value <= maximum:
+        return None, (
+            jsonify({"error": f"{name} must be between 1 and {maximum}"}),
+            400,
+        )
+
+    return value, None
 
 
 def request_weatherkit_json(url, params=None):
@@ -446,8 +466,24 @@ def weather_hourly():
     if error:
         return error
 
+    hours_requested, error = get_bounded_int_arg(
+        "hours", HOURLY_FORECAST_HOURS, HOURLY_FORECAST_HOURS
+    )
+    if error:
+        return error
+
     time_zone = timezone_for_coordinates(lat, lon)
-    data = fetch_weatherkit(lat, lon, "forecastHourly", {"timezone": time_zone})
+    data = fetch_weatherkit(
+        lat,
+        lon,
+        "forecastHourly",
+        {
+            "timezone": time_zone,
+            "relativeHourlyStart": 0,
+            "relativeHourlyEnd": hours_requested,
+            "hourlyRelativeTo": "now",
+        },
+    )
     forecast = data.get("forecastHourly")
 
     if not forecast:
@@ -464,7 +500,7 @@ def weather_hourly():
             "temperatureApparent": hour.get("temperatureApparent"),
             "precipitationChance": hour.get("precipitationChance"),
         }
-        for hour in forecast.get("hours", [])
+        for hour in forecast.get("hours", [])[:hours_requested]
     ]
 
     response = metadata_response_fields(metadata, lat, lon)
@@ -531,6 +567,12 @@ def weather_daily():
     if error:
         return error
 
+    days_requested, error = get_bounded_int_arg(
+        "days", DAILY_FORECAST_DAYS, DAILY_FORECAST_DAYS
+    )
+    if error:
+        return error
+
     time_zone = timezone_for_coordinates(lat, lon)
     data = fetch_weatherkit(lat, lon, "forecastDaily", {"timezone": time_zone})
     forecast = data.get("forecastDaily")
@@ -547,7 +589,7 @@ def weather_daily():
     valid_days.sort(key=lambda day: day["forecastStart"])
 
     days = []
-    for day in valid_days[:DAILY_FORECAST_DAYS]:
+    for day in valid_days[:days_requested]:
         days.append(
             {
                 "forecastStart": day.get("forecastStart"),
