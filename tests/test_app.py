@@ -1,7 +1,7 @@
 import importlib
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -166,22 +166,6 @@ def test_daily_returns_ten_chronological_metric_days(client, app_module, monkeyp
     assert calls == [("forecastDaily", {"timezone": "America/Denver"})]
 
 
-def test_daily_accepts_days_parameter(client, app_module, monkeypatch):
-    monkeypatch.setattr(
-        app_module,
-        "fetch_weatherkit",
-        lambda *args, **kwargs: daily_weatherkit_response(),
-    )
-
-    response = client.get(
-        "/weather/daily?lat=39.7392&lon=-104.9903&days=3",
-        headers=auth_headers(),
-    )
-
-    assert response.status_code == 200
-    assert len(response.get_json()["days"]) == 3
-
-
 def test_daily_detail_returns_direct_and_aggregated_fields(
     client, app_module, monkeypatch
 ):
@@ -326,7 +310,7 @@ def test_daily_returns_short_upstream_forecast(client, app_module, monkeypatch):
     assert len(response.get_json()["days"]) == 9
 
 
-def test_hourly_defaults_to_maximum_range(client, app_module, monkeypatch):
+def test_hourly_defaults_to_240_hours_on_v1(client, app_module, monkeypatch):
     calls = []
 
     def fake_fetch(lat, lon, dataset, extra_params=None):
@@ -342,61 +326,48 @@ def test_hourly_defaults_to_maximum_range(client, app_module, monkeypatch):
     response = client.get(
         "/weather/hourly?lat=39.7392&lon=-104.9903", headers=auth_headers()
     )
+
     assert response.status_code == 200
     assert response.get_json()["timeZone"] == "America/Denver"
-    assert calls == [
-        (
-            "forecastHourly",
-            {
-                "timezone": "America/Denver",
-                "relativeHourlyStart": 0,
-                "relativeHourlyEnd": 240,
-                "hourlyRelativeTo": "now",
-            },
-        )
-    ]
+    assert calls[0][0] == "forecastHourly"
+    params = calls[0][1]
+    assert params["timezone"] == "America/Denver"
+    assert datetime.fromisoformat(params["hourlyEnd"]) - datetime.fromisoformat(
+        params["hourlyStart"]
+    ) == timedelta(hours=240)
 
 
 def test_hourly_accepts_hours_parameter(client, app_module, monkeypatch):
     calls = []
-    upstream_hours = [
-        {"forecastStart": f"2026-11-03T{hour:02}:00:00-07:00"}
-        for hour in range(4)
-    ]
 
     def fake_fetch(lat, lon, dataset, extra_params=None):
-        calls.append((dataset, extra_params))
-        return {
-            "forecastHourly": {"metadata": {}, "hours": upstream_hours},
-        }
+        calls.append(extra_params)
+        return {"forecastHourly": {"metadata": {}, "hours": []}}
 
     monkeypatch.setattr(app_module, "fetch_weatherkit", fake_fetch)
     response = client.get(
-        "/weather/hourly?lat=39.7392&lon=-104.9903&hours=3",
+        "/weather/hourly?lat=39.7392&lon=-104.9903&hours=72",
         headers=auth_headers(),
     )
 
     assert response.status_code == 200
-    assert len(response.get_json()["hours"]) == 3
-    assert calls[0][1]["relativeHourlyEnd"] == 3
+    params = calls[0]
+    assert datetime.fromisoformat(params["hourlyEnd"]) - datetime.fromisoformat(
+        params["hourlyStart"]
+    ) == timedelta(hours=72)
 
 
 @pytest.mark.parametrize(
-    ("route", "parameter", "value", "message"),
+    ("hours", "message"),
     [
-        ("hourly", "hours", "storm", "hours must be an integer"),
-        ("hourly", "hours", "0", "hours must be between 1 and 240"),
-        ("hourly", "hours", "241", "hours must be between 1 and 240"),
-        ("daily", "days", "storm", "days must be an integer"),
-        ("daily", "days", "0", "days must be between 1 and 10"),
-        ("daily", "days", "11", "days must be between 1 and 10"),
+        ("storm", "hours must be an integer"),
+        ("0", "hours must be between 1 and 240"),
+        ("241", "hours must be between 1 and 240"),
     ],
 )
-def test_forecast_routes_validate_range_parameter(
-    client, route, parameter, value, message
-):
+def test_hourly_validates_hours_parameter(client, hours, message):
     response = client.get(
-        f"/weather/{route}?lat=39.7392&lon=-104.9903&{parameter}={value}",
+        f"/weather/hourly?lat=39.7392&lon=-104.9903&hours={hours}",
         headers=auth_headers(),
     )
 

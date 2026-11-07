@@ -1,6 +1,6 @@
 import os
 import time
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from datetime import time as datetime_time
 from functools import wraps
 from urllib.parse import quote, urlparse
@@ -18,7 +18,7 @@ APPLE_SERVICE_ID = os.environ["APPLE_SERVICE_ID"]
 APPLE_KEY_FILE = os.environ["APPLE_KEY_FILE"]
 WEATHER_API_KEY = os.environ["WEATHER_API_KEY"]
 
-WEATHERKIT_BASE_URL = "https://weatherkit.apple.com/api/v2/weather/en"
+WEATHERKIT_BASE_URL = "https://weatherkit.apple.com/api/v1/weather/en"
 WEATHERKIT_ALERT_BASE_URL = "https://weatherkit.apple.com/api/v1/weatherAlert/en"
 WEATHERKIT_TIMEZONE = os.environ.get("WEATHERKIT_TIMEZONE", "UTC")
 WEATHERKIT_COUNTRY_CODE = os.environ.get("WEATHERKIT_COUNTRY_CODE", "US")
@@ -103,25 +103,6 @@ def get_coordinates():
         return None, None, (jsonify({"error": "lon must be between -180 and 180"}), 400)
 
     return lat, lon, None
-
-
-def get_bounded_int_arg(name, default, maximum):
-    value_raw = request.args.get(name)
-    if value_raw is None:
-        return default, None
-
-    try:
-        value = int(value_raw)
-    except ValueError:
-        return None, (jsonify({"error": f"{name} must be an integer"}), 400)
-
-    if not 1 <= value <= maximum:
-        return None, (
-            jsonify({"error": f"{name} must be between 1 and {maximum}"}),
-            400,
-        )
-
-    return value, None
 
 
 def request_weatherkit_json(url, params=None):
@@ -466,12 +447,20 @@ def weather_hourly():
     if error:
         return error
 
-    hours_requested, error = get_bounded_int_arg(
-        "hours", HOURLY_FORECAST_HOURS, HOURLY_FORECAST_HOURS
-    )
-    if error:
-        return error
+    hours_raw = request.args.get("hours")
+    if hours_raw is None:
+        hours_requested = HOURLY_FORECAST_HOURS
+    else:
+        try:
+            hours_requested = int(hours_raw)
+        except ValueError:
+            return jsonify({"error": "hours must be an integer"}), 400
 
+        if not 1 <= hours_requested <= HOURLY_FORECAST_HOURS:
+            return jsonify({"error": "hours must be between 1 and 240"}), 400
+
+    forecast_start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    forecast_end = forecast_start + timedelta(hours=hours_requested)
     time_zone = timezone_for_coordinates(lat, lon)
     data = fetch_weatherkit(
         lat,
@@ -479,9 +468,8 @@ def weather_hourly():
         "forecastHourly",
         {
             "timezone": time_zone,
-            "relativeHourlyStart": 0,
-            "relativeHourlyEnd": hours_requested,
-            "hourlyRelativeTo": "now",
+            "hourlyStart": forecast_start.isoformat(),
+            "hourlyEnd": forecast_end.isoformat(),
         },
     )
     forecast = data.get("forecastHourly")
@@ -500,7 +488,7 @@ def weather_hourly():
             "temperatureApparent": hour.get("temperatureApparent"),
             "precipitationChance": hour.get("precipitationChance"),
         }
-        for hour in forecast.get("hours", [])[:hours_requested]
+        for hour in forecast.get("hours", [])
     ]
 
     response = metadata_response_fields(metadata, lat, lon)
@@ -567,12 +555,6 @@ def weather_daily():
     if error:
         return error
 
-    days_requested, error = get_bounded_int_arg(
-        "days", DAILY_FORECAST_DAYS, DAILY_FORECAST_DAYS
-    )
-    if error:
-        return error
-
     time_zone = timezone_for_coordinates(lat, lon)
     data = fetch_weatherkit(lat, lon, "forecastDaily", {"timezone": time_zone})
     forecast = data.get("forecastDaily")
@@ -589,7 +571,7 @@ def weather_daily():
     valid_days.sort(key=lambda day: day["forecastStart"])
 
     days = []
-    for day in valid_days[:days_requested]:
+    for day in valid_days[:DAILY_FORECAST_DAYS]:
         days.append(
             {
                 "forecastStart": day.get("forecastStart"),
