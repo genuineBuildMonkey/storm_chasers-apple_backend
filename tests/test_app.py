@@ -580,7 +580,7 @@ def test_alerts_expand_details_and_deduplicate(client, app_module, monkeypatch):
 
     assert response.status_code == 200
     assert calls == [
-        ("weatherAlerts", {"countryCode": "US"}),
+        ("weatherAlerts", {"country": "US"}),
         ("detail", "alert-123"),
     ]
     assert len(alerts) == 1

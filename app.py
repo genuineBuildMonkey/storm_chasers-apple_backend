@@ -415,7 +415,8 @@ def weather_alerts():
         lat,
         lon,
         "weatherAlerts",
-        {"countryCode": WEATHERKIT_COUNTRY_CODE},
+        # WeatherKit v1 rejects countryCode with HTTP 400; its alerts query uses country.
+        {"country": WEATHERKIT_COUNTRY_CODE},
     )
     collection = data.get("weatherAlerts") or {}
     summaries = collection.get("alerts") or []
