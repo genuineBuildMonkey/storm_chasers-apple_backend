@@ -57,8 +57,12 @@ forecast (for example, `time=2026-11-03T03%3A00%3A00-07%3A00`) and returns the
 conditions for that hour, including apparent temperature, precipitation amount,
 snowfall intensity, wind and gust, UV index, cloud cover, and pressure. Hourly
 and daily responses include an IANA `timeZone` resolved from their coordinates.
-Alert responses contain an `alerts` array; WeatherKit alert detail text is
-resolved by the backend.
+Alert responses contain an `alerts` array. Each alert includes `id`, `event`,
+`headline`, and `description`, plus Apple's available `severity`, `source`,
+`issuedTime`, `effectiveTime`, `eventOnsetTime`, `eventEndTime`, `expireTime`, and
+`detailsUrl` fields. The backend fetches official alert message text by ID;
+if that lookup fails, it returns the summary fields. Clients should link each
+displayed alert to `detailsUrl` and show the issuing `source` beside its text.
 
 Example:
 

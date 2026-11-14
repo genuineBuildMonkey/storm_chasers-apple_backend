@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-import time
 import json
-import requests
-import jwt  # pip install pyjwt cryptography
+import time
 
+import jwt  # pip install pyjwt cryptography
+import requests
 
 TEAM_ID = "C3F7H8C997"
 KEY_ID = "4VCDW876YY"
@@ -18,7 +18,7 @@ LON = -104.5230
 
 
 def make_token():
-    with open(P8_FILE, "r") as f:
+    with open(P8_FILE) as f:
         private_key = f.read()
 
     now = int(time.time())

@@ -493,6 +493,7 @@ def test_alerts_expand_details_and_deduplicate(client, app_module, monkeypatch):
         "certainty": "observed",
         "source": "National Weather Service",
         "effectiveTime": "2026-11-03T20:00:00Z",
+        "issuedTime": "2026-11-03T19:58:00Z",
         "eventOnsetTime": "2026-11-03T20:05:00Z",
         "eventEndTime": "2026-11-03T21:00:00Z",
         "expireTime": "2026-11-03T21:15:00Z",
@@ -543,6 +544,7 @@ def test_alerts_expand_details_and_deduplicate(client, app_module, monkeypatch):
         "certainty": "observed",
         "source": "National Weather Service",
         "effectiveTime": "2026-11-03T20:00:00Z",
+        "issuedTime": "2026-11-03T19:58:00Z",
         "eventOnsetTime": "2026-11-03T20:05:00Z",
         "eventEndTime": "2026-11-03T21:00:00Z",
         "expireTime": "2026-11-03T21:15:00Z",
@@ -550,6 +552,57 @@ def test_alerts_expand_details_and_deduplicate(client, app_module, monkeypatch):
         "instructions": "Move to an interior room.",
         "detailsUrl": "https://weatherkit.apple.com/alertDetails/alert-123",
     }
+
+
+def test_alerts_keep_summary_when_details_fail_and_use_collection_link(
+    client, app_module, monkeypatch
+):
+    summary = {
+        "id": "alert-456",
+        "description": "Flood Warning",
+        "severity": "severe",
+        "source": "National Weather Service",
+        "effectiveTime": "2026-11-03T20:00:00Z",
+        "expireTime": "2026-11-03T22:00:00Z",
+    }
+    collection_link = "https://weatherkit.apple.com/weather-alerts"
+    monkeypatch.setattr(
+        app_module,
+        "fetch_weatherkit",
+        lambda *args, **kwargs: {
+            "weatherAlerts": {
+                "alerts": [summary],
+                "detailsUrl": collection_link,
+            }
+        },
+    )
+
+    detail_calls = []
+
+    def fail_details(alert):
+        detail_calls.append(alert["id"])
+        raise app_module.WeatherKitError("WeatherKit request failed")
+
+    monkeypatch.setattr(app_module, "fetch_weatherkit_alert_details", fail_details)
+    response = client.get(
+        "/weather/alerts?lat=39.7392&lon=-104.9903", headers=auth_headers()
+    )
+
+    assert response.status_code == 200
+    assert detail_calls == ["alert-456"]
+    assert response.get_json()["alerts"] == [
+        {
+            "id": "alert-456",
+            "event": "Flood Warning",
+            "headline": "Flood Warning",
+            "description": "Flood Warning",
+            "severity": "severe",
+            "source": "National Weather Service",
+            "effectiveTime": "2026-11-03T20:00:00Z",
+            "expireTime": "2026-11-03T22:00:00Z",
+            "detailsUrl": collection_link,
+        }
+    ]
 
 
 @pytest.mark.parametrize("route", ["daily", "alerts"])
