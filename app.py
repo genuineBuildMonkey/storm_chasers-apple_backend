@@ -6,6 +6,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from timezonefinder import TimezoneFinder
 
+from moon_illumination import FIRST_YEAR, LAST_YEAR, moon_illumination
 from weather_format import (
     day_part_detail_response,
     day_part_response,
@@ -73,6 +74,16 @@ def get_coordinates():
         return None, None, (jsonify({"error": "lon must be between -180 and 180"}), 400)
 
     return lat, lon, None
+
+
+def get_forecast_date():
+    date_raw = request.args.get("date")
+    if date_raw is None:
+        return None, (jsonify({"error": "date is required"}), 400)
+    try:
+        return date.fromisoformat(date_raw), None
+    except ValueError:
+        return None, (jsonify({"error": "date must use YYYY-MM-DD format"}), 400)
 
 
 def timezone_for_coordinates(lat, lon):
@@ -314,13 +325,9 @@ def weather_daily_detail():
     if error:
         return error
 
-    date_raw = request.args.get("date")
-    if date_raw is None:
-        return jsonify({"error": "date is required"}), 400
-    try:
-        forecast_date = date.fromisoformat(date_raw)
-    except ValueError:
-        return jsonify({"error": "date must use YYYY-MM-DD format"}), 400
+    forecast_date, error = get_forecast_date()
+    if error:
+        return error
 
     time_zone = timezone_for_coordinates(lat, lon)
     day_start, day_end, hourly_start, hourly_end = detail_date_bounds(
@@ -372,6 +379,29 @@ def weather_daily_detail():
     response["units"] = metadata.get("units", "metric")
     response["day"] = detail
     return jsonify(response)
+
+
+@app.get("/weather/moon")
+@require_api_key
+def weather_moon():
+    lat, lon, error = get_coordinates()
+    if error:
+        return error
+
+    forecast_date, error = get_forecast_date()
+    if error:
+        return error
+    if not FIRST_YEAR <= forecast_date.year <= LAST_YEAR:
+        return jsonify({"error": "date must be between 2026 and 2032"}), 400
+
+    time_zone = timezone_for_coordinates(lat, lon)
+    return jsonify(
+        {
+            "date": forecast_date.isoformat(),
+            "timeZone": time_zone,
+            "moonIllumination": moon_illumination(forecast_date),
+        }
+    )
 
 
 @app.get("/weather/alerts")

@@ -45,6 +45,7 @@ the `X-Weather-Key` header and `lat`/`lon` query parameters:
 - `GET /weather/next-hour`
 - `GET /weather/daily`
 - `GET /weather/daily/detail`
+- `GET /weather/moon`
 - `GET /weather/alerts`
 
 Daily forecasts contain up to the first 10 chronological WeatherKit days. The daily
@@ -63,6 +64,14 @@ Alert responses contain an `alerts` array. Each alert includes `id`, `event`,
 `detailsUrl` fields. The backend fetches official alert message text by ID;
 if that lookup fails, it returns the summary fields. Clients should link each
 displayed alert to `detailsUrl` and show the issuing `source` beside its text.
+
+The moon route requires `date=YYYY-MM-DD` along with `lat` and `lon`. It returns
+`moonIllumination` as a whole-number percentage from 0 to 100. Values for
+2026–2032 are checked into the repository from the US Naval Observatory's yearly
+fraction tables at midnight UTC (`task=00`, `tz=0.00`). The value is the same for
+all coordinates on a given UTC date; `timeZone` remains in the response for
+consistency with other weather routes. No external moon service is called at
+request time. Dates outside the table return a JSON 400 error.
 
 Example:
 

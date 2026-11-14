@@ -483,6 +483,56 @@ def test_alerts_returns_empty_list_when_unavailable(client, app_module, monkeypa
     assert response.get_json()["alerts"] == []
 
 
+@pytest.mark.parametrize(
+    ("forecast_date", "expected_percentage"),
+    [("2026-01-01", 91), ("2028-02-29", 11), ("2032-12-31", 3)],
+)
+def test_moon_route_returns_static_percentage(client, forecast_date, expected_percentage):
+    response = client.get(
+        f"/weather/moon?lat=39.7392&lon=-104.9903&date={forecast_date}",
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "date": forecast_date,
+        "timeZone": "America/Denver",
+        "moonIllumination": expected_percentage,
+    }
+
+
+def test_moon_route_never_calls_an_upstream_service(client, monkeypatch):
+    def reject_request(*args, **kwargs):
+        pytest.fail("moon lookup made an outbound HTTP request")
+
+    monkeypatch.setattr("requests.get", reject_request)
+    response = client.get(
+        "/weather/moon?lat=39.7392&lon=-104.9903&date=2027-01-01",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 200
+    assert response.get_json()["moonIllumination"] == 38
+
+
+def test_moon_route_requires_key_and_valid_date(client):
+    query = "/weather/moon?lat=39.7392&lon=-104.9903&date=2027-01-01"
+    response = client.get(query)
+    assert response.status_code == 401
+
+    for date_query, expected in [
+        ("", "date is required"),
+        ("&date=bad", "date must use YYYY-MM-DD format"),
+        ("&date=2025-12-31", "date must be between 2026 and 2032"),
+        ("&date=2033-01-01", "date must be between 2026 and 2032"),
+    ]:
+        response = client.get(
+            f"/weather/moon?lat=39.7392&lon=-104.9903{date_query}",
+            headers=auth_headers(),
+        )
+        assert response.status_code == 400
+        assert response.get_json() == {"error": expected}
+
+
 def test_alerts_expand_details_and_deduplicate(client, app_module, monkeypatch):
     summary = {
         "id": "alert-123",

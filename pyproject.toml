@@ -24,7 +24,7 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = ["app", "weather_format", "weatherkit_client"]
+py-modules = ["app", "moon_illumination", "weather_format", "weatherkit_client"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
