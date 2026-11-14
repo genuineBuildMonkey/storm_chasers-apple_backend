@@ -364,7 +364,8 @@ MOON_ILLUMINATION_PERCENT = {
 
 
 def moon_illumination(forecast_date):
-    """Return the percentage for a UTC calendar date."""
-    return MOON_ILLUMINATION_PERCENT[forecast_date.year][forecast_date.month - 1][
+    """Return a 0–1 fraction for a UTC calendar date."""
+    percentage = MOON_ILLUMINATION_PERCENT[forecast_date.year][forecast_date.month - 1][
         forecast_date.day - 1
     ]
+    return percentage / 100

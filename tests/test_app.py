@@ -237,6 +237,7 @@ def test_daily_detail_returns_direct_and_aggregated_fields(
     assert first_day["sunrise"] == "2026-11-03T06:30:00-07:00"
     assert first_day["sunset"] == "2026-11-03T16:55:00-07:00"
     assert first_day["moonPhase"] == "waningCrescent"
+    assert first_day["moonIllumination"] == 0.37
     assert first_day["moonrise"] == "2026-11-03T02:15:00-07:00"
     assert first_day["moonset"] == "2026-11-03T14:20:00-07:00"
     assert first_day["daytimeForecast"]["precipitationAmount"] == 1.5
@@ -484,10 +485,10 @@ def test_alerts_returns_empty_list_when_unavailable(client, app_module, monkeypa
 
 
 @pytest.mark.parametrize(
-    ("forecast_date", "expected_percentage"),
-    [("2026-01-01", 91), ("2028-02-29", 11), ("2032-12-31", 3)],
+    ("forecast_date", "expected_fraction"),
+    [("2026-01-01", 0.91), ("2028-02-29", 0.11), ("2032-12-31", 0.03)],
 )
-def test_moon_route_returns_static_percentage(client, forecast_date, expected_percentage):
+def test_moon_route_returns_static_fraction(client, forecast_date, expected_fraction):
     response = client.get(
         f"/weather/moon?lat=39.7392&lon=-104.9903&date={forecast_date}",
         headers=auth_headers(),
@@ -497,7 +498,7 @@ def test_moon_route_returns_static_percentage(client, forecast_date, expected_pe
     assert response.get_json() == {
         "date": forecast_date,
         "timeZone": "America/Denver",
-        "moonIllumination": expected_percentage,
+        "moonIllumination": expected_fraction,
     }
 
 
@@ -511,7 +512,7 @@ def test_moon_route_never_calls_an_upstream_service(client, monkeypatch):
         headers=auth_headers(),
     )
     assert response.status_code == 200
-    assert response.get_json()["moonIllumination"] == 38
+    assert response.get_json()["moonIllumination"] == 0.38
 
 
 def test_moon_route_requires_key_and_valid_date(client):

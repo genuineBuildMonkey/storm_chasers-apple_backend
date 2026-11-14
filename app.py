@@ -363,6 +363,11 @@ def weather_daily_detail():
         "sunrise": day.get("sunrise"),
         "sunset": day.get("sunset"),
         "moonPhase": day.get("moonPhase"),
+        "moonIllumination": (
+            moon_illumination(forecast_date)
+            if FIRST_YEAR <= forecast_date.year <= LAST_YEAR
+            else None
+        ),
         "moonrise": day.get("moonrise"),
         "moonset": day.get("moonset"),
         "daytimeForecast": day_part_detail_response(

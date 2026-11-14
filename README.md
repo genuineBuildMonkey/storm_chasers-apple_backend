@@ -50,7 +50,8 @@ the `X-Weather-Key` header and `lat`/`lon` query parameters:
 
 Daily forecasts contain up to the first 10 chronological WeatherKit days. The daily
 detail route also requires a `date=YYYY-MM-DD` query parameter and returns one
-day with sunrise, sunset, moon phase, moonrise, moonset, direct day-part values,
+day with sunrise, sunset, moon phase, moon illumination, moonrise, moonset,
+direct day-part values,
 and hourly-derived feels-like temperature, maximum gust, maximum UV index, and
 average pressure. The hourly
 detail route requires a URL-encoded, offset-aware ISO 8601 `time` from an hourly
@@ -66,7 +67,8 @@ if that lookup fails, it returns the summary fields. Clients should link each
 displayed alert to `detailsUrl` and show the issuing `source` beside its text.
 
 The moon route requires `date=YYYY-MM-DD` along with `lat` and `lon`. It returns
-`moonIllumination` as a whole-number percentage from 0 to 100. Values for
+`moonIllumination` as a fraction from 0 to 1 (for example, `0.37` means 37%).
+The same field is included in daily detail responses. Values for
 2026–2032 are checked into the repository from the US Naval Observatory's yearly
 fraction tables at midnight UTC (`task=00`, `tz=0.00`). The value is the same for
 all coordinates on a given UTC date; `timeZone` remains in the response for

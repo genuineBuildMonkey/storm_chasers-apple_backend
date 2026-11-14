@@ -25,10 +25,10 @@ def test_year_tables_cover_calendar_with_source_boundaries(year, first, last):
         calendar.monthrange(year, month)[1] for month in range(1, 13)
     ]
     assert all(0 <= value <= 100 for month in months for value in month)
-    assert moon_illumination(date(year, 1, 1)) == first
-    assert moon_illumination(date(year, 12, 31)) == last
+    assert moon_illumination(date(year, 1, 1)) == first / 100
+    assert moon_illumination(date(year, 12, 31)) == last / 100
 
 
 def test_leap_days_match_usno_year_tables():
-    assert moon_illumination(date(2028, 2, 29)) == 11
-    assert moon_illumination(date(2032, 2, 29)) == 93
+    assert moon_illumination(date(2028, 2, 29)) == 0.11
+    assert moon_illumination(date(2032, 2, 29)) == 0.93
