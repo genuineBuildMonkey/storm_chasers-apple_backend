@@ -82,6 +82,15 @@ curl -H "X-Weather-Key: $WEATHER_API_KEY" \
   "http://127.0.0.1:5001/weather/current?lat=39.7392&lon=-104.9903"
 ```
 
+The AirNow proxy also requires `X-Weather-Key`. Set `AIRNOW_API_KEY` in the
+backend environment and send `latitude` and `longitude` to either route.
+
+- `GET /api/airnow/observation/current/ziplatlong/`
+- `GET /api/airnow/forecast/current/`
+
+Both routes request JSON from AirNow. The forecast route returns all available
+forecast dates so the homepage can select tomorrow's readings.
+
 ## Checks
 
 ```bash

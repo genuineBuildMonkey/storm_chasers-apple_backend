@@ -6,6 +6,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from timezonefinder import TimezoneFinder
 
+from airnow_client import AIRNOW_FORECAST_PATH, AIRNOW_OBSERVATION_PATH, AirNowError, fetch_airnow
 from moon_illumination import FIRST_YEAR, LAST_YEAR, moon_illumination
 from weather_format import (
     day_part_detail_response,
@@ -41,6 +42,10 @@ CORS(
             "allow_headers": ["X-Weather-Key"],
         },
         r"/api/lightning/closest": {
+            "origins": "*",
+            "allow_headers": ["X-Weather-Key"],
+        },
+        r"/api/airnow/.*": {
             "origins": "*",
             "allow_headers": ["X-Weather-Key"],
         },
@@ -97,6 +102,7 @@ def timezone_for_coordinates(lat, lon):
 
 @app.errorhandler(WeatherKitError)
 @app.errorhandler(XweatherError)
+@app.errorhandler(AirNowError)
 def handle_upstream_error(exc):
     return jsonify({"error": str(exc)}), 502
 
@@ -106,10 +112,7 @@ def health():
     return jsonify({"status": "ok"})
 
 
-@app.get("/api/lightning/closest")
-@require_api_key
-def lightning_closest():
-    upstream = fetch_lightning_closest(request.args.items(multi=True))
+def upstream_response(upstream):
     response = app.response_class(upstream.content, status=upstream.status_code)
     content_type = upstream.headers.get("Content-Type")
     if content_type is None:
@@ -117,6 +120,19 @@ def lightning_closest():
     else:
         response.headers["Content-Type"] = content_type
     return response
+
+
+@app.get("/api/lightning/closest")
+@require_api_key
+def lightning_closest():
+    return upstream_response(fetch_lightning_closest(request.args.items(multi=True)))
+
+
+@app.get(f"/api/airnow{AIRNOW_OBSERVATION_PATH}", defaults={"path": AIRNOW_OBSERVATION_PATH})
+@app.get(f"/api/airnow{AIRNOW_FORECAST_PATH}", defaults={"path": AIRNOW_FORECAST_PATH})
+@require_api_key
+def airnow(path):
+    return upstream_response(fetch_airnow(path, request.args))
 
 
 @app.get("/weather/next-hour")

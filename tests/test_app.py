@@ -168,6 +168,108 @@ def test_lightning_transport_failure_keeps_credentials_private(
     assert "server-secret" not in caplog.text
 
 
+@pytest.fixture
+def airnow_get(monkeypatch):
+    monkeypatch.setenv("AIRNOW_API_KEY", "airnow-server-key")
+    upstream_get = Mock()
+    monkeypatch.setattr("airnow_client.requests.get", upstream_get)
+    return upstream_get
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/observation/current/ziplatlong/", b'[{"nowcastAQI": 24}]'),
+        (
+            "/forecast/current/",
+            b'[{"dateValid": "2026-11-19", "aqi": 23}, {"dateValid": "2026-11-20", "aqi": 26}]',
+        ),
+    ],
+)
+def test_airnow_proxies_json_without_exposing_the_api_key(client, airnow_get, path, body):
+    airnow_get.return_value = SimpleNamespace(
+        content=body, status_code=200, headers={"Content-Type": "application/json; charset=utf-8"}
+    )
+
+    response = client.get(
+        f"/api/airnow{path}?latitude=33.3943&longitude=-104.5230&format=application/json"
+        "&API_KEY=caller-key&api_key=another-caller-key",
+        headers=auth_headers(),
+    )
+
+    airnow_get.assert_called_once_with(
+        f"https://www.airnowapi.org/aq{path}",
+        params={
+            "latitude": "33.3943",
+            "longitude": "-104.5230",
+            "format": "application/json",
+            "API_KEY": "airnow-server-key",
+        },
+        timeout=15,
+        allow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "application/json; charset=utf-8"
+    assert response.data == body
+
+
+def test_airnow_requires_api_key(client, airnow_get):
+    response = client.get("/api/airnow/forecast/current/")
+
+    assert response.status_code == 401
+    airnow_get.assert_not_called()
+
+
+def test_airnow_allows_browser_preflight(client, airnow_get):
+    response = client.options(
+        "/api/airnow/forecast/current/",
+        headers={
+            "Origin": "https://homepage.example",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Weather-Key",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == "https://homepage.example"
+    assert response.headers["Access-Control-Allow-Headers"] == "X-Weather-Key"
+    airnow_get.assert_not_called()
+
+
+def test_airnow_missing_api_key(client, airnow_get, monkeypatch):
+    monkeypatch.delenv("AIRNOW_API_KEY")
+
+    response = client.get("/api/airnow/forecast/current/", headers=auth_headers())
+
+    assert response.status_code == 502
+    assert response.get_json() == {"error": "AirNow API key is not configured"}
+    airnow_get.assert_not_called()
+
+
+def test_airnow_sanitizes_upstream_error(client, airnow_get):
+    airnow_get.return_value = SimpleNamespace(status_code=429, content=b"airnow-server-key")
+
+    response = client.get("/api/airnow/forecast/current/", headers=auth_headers())
+
+    assert response.status_code == 502
+    assert response.get_json() == {"error": "AirNow returned HTTP 429"}
+
+
+def test_airnow_timeout_keeps_upstream_url_private(client, airnow_get, caplog):
+    def fail(*args, **kwargs):
+        path = "/aq/forecast/current/?API_KEY=airnow-server-key"
+        logging.getLogger("urllib3.connectionpool").debug("GET %s", path)
+        raise requests.Timeout(f"Request failed for https://www.airnowapi.org{path}")
+
+    airnow_get.side_effect = fail
+    with caplog.at_level(logging.DEBUG, logger="urllib3.connectionpool"):
+        response = client.get("/api/airnow/forecast/current/", headers=auth_headers())
+
+    assert response.status_code == 502
+    assert response.get_json() == {"error": "AirNow request failed"}
+    assert "airnow-server-key" not in caplog.text
+
+
 def daily_weatherkit_response(day_count=10):
     first_day = date(2026, 11, 3)
     days = []
