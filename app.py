@@ -22,6 +22,7 @@ from weatherkit_client import (
     fetch_weatherkit,
     fetch_weatherkit_alert_details,
 )
+from xweather_client import XweatherError, fetch_lightning_closest
 
 WEATHER_API_KEY = os.environ["WEATHER_API_KEY"]
 WEATHERKIT_COUNTRY_CODE = os.environ.get("WEATHERKIT_COUNTRY_CODE", "US")
@@ -38,7 +39,11 @@ CORS(
         r"/weather/*": {
             "origins": "*",
             "allow_headers": ["X-Weather-Key"],
-        }
+        },
+        r"/api/lightning/closest": {
+            "origins": "*",
+            "allow_headers": ["X-Weather-Key"],
+        },
     },
 )
 
@@ -91,13 +96,27 @@ def timezone_for_coordinates(lat, lon):
 
 
 @app.errorhandler(WeatherKitError)
-def handle_weatherkit_error(exc):
+@app.errorhandler(XweatherError)
+def handle_upstream_error(exc):
     return jsonify({"error": str(exc)}), 502
 
 
 @app.get("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.get("/api/lightning/closest")
+@require_api_key
+def lightning_closest():
+    upstream = fetch_lightning_closest(request.args.items(multi=True))
+    response = app.response_class(upstream.content, status=upstream.status_code)
+    content_type = upstream.headers.get("Content-Type")
+    if content_type is None:
+        response.headers.pop("Content-Type", None)
+    else:
+        response.headers["Content-Type"] = content_type
+    return response
 
 
 @app.get("/weather/next-hour")

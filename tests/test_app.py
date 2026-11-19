@@ -1,9 +1,13 @@
 import importlib
+import logging
 import os
 import sys
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+import requests
 
 
 @pytest.fixture(scope="module")
@@ -44,6 +48,124 @@ def fixed_timezone(app_module, monkeypatch):
 
 def auth_headers():
     return {"X-Weather-Key": "test-api-key"}
+
+
+@pytest.fixture
+def xweather_get(monkeypatch):
+    monkeypatch.setenv("XWEATHER_CLIENT_ID", "server-id")
+    monkeypatch.setenv("XWEATHER_CLIENT_SECRET", "server-secret")
+    upstream_get = Mock()
+    monkeypatch.setattr("xweather_client.requests.get", upstream_get)
+    return upstream_get
+
+
+@pytest.mark.parametrize(
+    ("query", "params", "status", "content_type", "body"),
+    [
+        (
+            "?p=33.3943,-104.5230&radius=100km&limit=1000",
+            [("p", "33.3943,-104.5230"), ("radius", "100km"), ("limit", "1000")],
+            200,
+            "application/json; charset=utf-8",
+            b'{ "success": true, "error": null, "response": [] }\n',
+        ),
+        (
+            "?p=33.3943,-104.5230&radius=100km&limit=1000&format=geojson"
+            "&filter=ic&filter=cg&client_id=caller-id&client_secret=caller-secret"
+            "&client_secret=second-caller-secret",
+            [
+                ("p", "33.3943,-104.5230"),
+                ("radius", "100km"),
+                ("limit", "1000"),
+                ("format", "geojson"),
+                ("filter", "ic"),
+                ("filter", "cg"),
+            ],
+            200,
+            "application/geo+json",
+            b'{ "type": "FeatureCollection", "features": [] }\n',
+        ),
+        (
+            "?p=&radius=invalid",
+            [("p", ""), ("radius", "invalid")],
+            400,
+            "application/json",
+            b'{ "success": false, "error": { "code": "invalid_query" }, "response": [] }',
+        ),
+    ],
+)
+def test_lightning_preserves_query_and_upstream_response(
+    client, xweather_get, query, params, status, content_type, body
+):
+    xweather_get.return_value = SimpleNamespace(
+        content=body, status_code=status, headers={"Content-Type": content_type}
+    )
+
+    response = client.get(f"/api/lightning/closest{query}", headers=auth_headers())
+
+    xweather_get.assert_called_once_with(
+        "https://data.api.xweather.com/lightning/closest",
+        params=[*params, ("client_id", "server-id"), ("client_secret", "server-secret")],
+        timeout=15,
+        allow_redirects=False,
+    )
+    assert response.status_code == status
+    assert response.headers["Content-Type"] == content_type
+    assert response.data == body
+
+
+def test_lightning_requires_api_key(client, xweather_get):
+    response = client.get("/api/lightning/closest")
+
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "unauthorized"}
+    xweather_get.assert_not_called()
+
+
+def test_lightning_allows_browser_preflight(client, xweather_get):
+    origin = "https://radar.example"
+    response = client.options(
+        "/api/lightning/closest",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Weather-Key",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Access-Control-Allow-Origin"] == origin
+    assert response.headers["Access-Control-Allow-Headers"] == "X-Weather-Key"
+    xweather_get.assert_not_called()
+
+
+def test_lightning_missing_credentials(client, xweather_get, monkeypatch):
+    monkeypatch.delenv("XWEATHER_CLIENT_SECRET")
+
+    response = client.get("/api/lightning/closest", headers=auth_headers())
+
+    assert response.status_code == 502
+    assert response.get_json() == {"error": "Xweather credentials are not configured"}
+    xweather_get.assert_not_called()
+
+
+@pytest.mark.parametrize("exception", [requests.ConnectionError, requests.Timeout])
+def test_lightning_transport_failure_keeps_credentials_private(
+    client, xweather_get, exception, caplog
+):
+    def fail(*args, **kwargs):
+        logger = logging.getLogger("urllib3.connectionpool")
+        path = "/lightning/closest?client_id=server-id&client_secret=server-secret"
+        logger.debug("GET %s", path)
+        raise exception(f"Request failed for https://data.api.xweather.com{path}")
+
+    xweather_get.side_effect = fail
+    with caplog.at_level(logging.DEBUG, logger="urllib3.connectionpool"):
+        response = client.get("/api/lightning/closest", headers=auth_headers())
+
+    assert response.status_code == 502
+    assert response.get_json() == {"error": "Xweather request failed"}
+    assert "server-secret" not in caplog.text
 
 
 def daily_weatherkit_response(day_count=10):
