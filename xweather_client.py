@@ -1,4 +1,4 @@
-"""Authenticated requests to the Xweather lightning endpoint."""
+"""Authenticated requests for individual Xweather lightning strikes."""
 
 import logging
 import os
@@ -7,7 +7,7 @@ import requests
 
 XWEATHER_LIGHTNING_URL = "https://data.api.xweather.com/lightning/closest"
 XWEATHER_TIMEOUT_SECONDS = 15
-XWEATHER_CREDENTIAL_PARAMS = {"client_id", "client_secret"}
+XWEATHER_SERVER_PARAMS = {"client_id", "client_secret", "filter"}
 
 
 class XweatherError(Exception):
@@ -28,8 +28,8 @@ def fetch_lightning_closest(query):
     if not client_id or not client_secret:
         raise XweatherError("Xweather credentials are not configured")
 
-    params = [(name, value) for name, value in query if name not in XWEATHER_CREDENTIAL_PARAMS]
-    params.extend([("client_id", client_id), ("client_secret", client_secret)])
+    params = [(name, value) for name, value in query if name not in XWEATHER_SERVER_PARAMS]
+    params.extend([("filter", "cg"), ("client_id", client_id), ("client_secret", client_secret)])
     try:
         return requests.get(
             XWEATHER_LIGHTNING_URL,

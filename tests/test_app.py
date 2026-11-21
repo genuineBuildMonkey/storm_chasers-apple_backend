@@ -67,19 +67,18 @@ def xweather_get(monkeypatch):
             [("p", "33.3943,-104.5230"), ("radius", "100km"), ("limit", "1000")],
             200,
             "application/json; charset=utf-8",
-            b'{ "success": true, "error": null, "response": [] }\n',
+            b'{ "success": true, "error": null, "response": ['
+            b'{ "id": "strike-1", "ob": { "pulse": { "type": "cg" } } }] }\n',
         ),
         (
             "?p=33.3943,-104.5230&radius=100km&limit=1000&format=geojson"
-            "&filter=ic&filter=cg&client_id=caller-id&client_secret=caller-secret"
+            "&filter=all&filter=ic&client_id=caller-id&client_secret=caller-secret"
             "&client_secret=second-caller-secret",
             [
                 ("p", "33.3943,-104.5230"),
                 ("radius", "100km"),
                 ("limit", "1000"),
                 ("format", "geojson"),
-                ("filter", "ic"),
-                ("filter", "cg"),
             ],
             200,
             "application/geo+json",
@@ -94,7 +93,7 @@ def xweather_get(monkeypatch):
         ),
     ],
 )
-def test_lightning_preserves_query_and_upstream_response(
+def test_lightning_requests_ground_strikes_and_preserves_upstream_response(
     client, xweather_get, query, params, status, content_type, body
 ):
     xweather_get.return_value = SimpleNamespace(
@@ -105,7 +104,12 @@ def test_lightning_preserves_query_and_upstream_response(
 
     xweather_get.assert_called_once_with(
         "https://data.api.xweather.com/lightning/closest",
-        params=[*params, ("client_id", "server-id"), ("client_secret", "server-secret")],
+        params=[
+            *params,
+            ("filter", "cg"),
+            ("client_id", "server-id"),
+            ("client_secret", "server-secret"),
+        ],
         timeout=15,
         allow_redirects=False,
     )
