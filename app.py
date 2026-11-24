@@ -249,6 +249,7 @@ def weather_hourly():
             "temperature": hour.get("temperature"),
             "temperatureApparent": hour.get("temperatureApparent"),
             "precipitationChance": hour.get("precipitationChance"),
+            "precipitationType": hour.get("precipitationType"),
         }
         for hour in forecast.get("hours", [])
     ]

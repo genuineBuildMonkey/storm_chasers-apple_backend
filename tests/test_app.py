@@ -571,7 +571,18 @@ def test_hourly_accepts_hours_parameter(client, app_module, monkeypatch):
 
     def fake_fetch(lat, lon, dataset, extra_params=None):
         calls.append(extra_params)
-        return {"forecastHourly": {"metadata": {}, "hours": []}}
+        return {
+            "forecastHourly": {
+                "metadata": {},
+                "hours": [
+                    {
+                        "forecastStart": "2026-11-03T20:00:00Z",
+                        "precipitationType": "snow",
+                    },
+                    {"forecastStart": "2026-11-03T21:00:00Z"},
+                ],
+            }
+        }
 
     monkeypatch.setattr(app_module, "fetch_weatherkit", fake_fetch)
     response = client.get(
@@ -580,6 +591,8 @@ def test_hourly_accepts_hours_parameter(client, app_module, monkeypatch):
     )
 
     assert response.status_code == 200
+    hours = response.get_json()["hours"]
+    assert [hour["precipitationType"] for hour in hours] == ["snow", None]
     params = calls[0]
     assert datetime.fromisoformat(params["hourlyEnd"]) - datetime.fromisoformat(
         params["hourlyStart"]
